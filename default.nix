@@ -10,7 +10,7 @@ let
     cargo = rust;
   };
 
-  common-deps = import ./nix/common-deps.nix { inherit sources pkgs rust; };
+  common-deps = import ./nix/common-deps.nix { inherit sources rust; };
 
   # tell nix-build to ignore the `target` directory
   src = builtins.filterSource
