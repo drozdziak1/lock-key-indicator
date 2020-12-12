@@ -1,48 +1,84 @@
+use failure::format_err;
 use lock_keys::*;
 use systray::Application;
+use tempfile::{Builder, TempDir};
 
 use std::error::Error;
+use std::{fs::File, io::Write, path::PathBuf};
 
 pub type ErrBox = Box<dyn Error>;
 
-pub static WHITE: &'static str = "/home/drozdziak1/Samogon/WIP/white.png";
-pub static GRAY: &'static str = "/home/drozdziak1/Samogon/WIP/gray.png";
+pub static N_ON_C_ON_FNAME: &'static str = "n_on_c_on.png";
+pub static N_ON_C_OFF_FNAME: &'static str = "n_on_c_off.png";
+pub static N_OFF_C_ON_FNAME: &'static str = "n_off_c_on.png";
+pub static N_OFF_C_OFF_FNAME: &'static str = "n_off_c_off.png";
 
-fn state2file(s: LockKeyState) -> &'static str {
-    match s {
-        LockKeyState::Enabled => WHITE,
-        LockKeyState::Disabled => GRAY,
+pub static FNAMES: [&'static str; 4] = [
+    N_ON_C_ON_FNAME,
+    N_ON_C_OFF_FNAME,
+    N_OFF_C_ON_FNAME,
+    N_OFF_C_OFF_FNAME,
+];
+
+pub static N_ON_C_ON_BYTES: &'static [u8] = include_bytes!("../n_on_c_on.png");
+pub static N_ON_C_OFF_BYTES: &'static [u8] = include_bytes!("../n_on_c_off.png");
+pub static N_OFF_C_ON_BYTES: &'static [u8] = include_bytes!("../n_off_c_on.png");
+pub static N_OFF_C_OFF_BYTES: &'static [u8] = include_bytes!("../n_off_c_off.png");
+
+pub static BYTES: [&'static [u8]; 4] = [
+    N_ON_C_ON_BYTES,
+    N_ON_C_OFF_BYTES,
+    N_OFF_C_ON_BYTES,
+    N_OFF_C_OFF_BYTES,
+];
+
+fn state2filename(numlock_state: LockKeyState, capslock_state: LockKeyState) -> &'static str {
+    use LockKeyState::*;
+    match (numlock_state, capslock_state) {
+        (Enabled, Enabled) => N_ON_C_ON_FNAME,
+        (Enabled, Disabled) => N_ON_C_OFF_FNAME,
+        (Disabled, Enabled) => N_OFF_C_ON_FNAME,
+        (Disabled, Disabled) => N_OFF_C_OFF_FNAME,
     }
 }
 
+fn prepare_asset_files(dir: &TempDir) -> Result<(), ErrBox> {
+    for (idx, bytes) in BYTES.iter().enumerate() {
+        let mut pb = PathBuf::from(dir.path());
+        pb.push(FNAMES[idx]);
+        let mut f = File::create(pb)?;
+        f.write_all(bytes)?;
+    }
+    Ok(())
+}
+
 fn main() -> Result<(), ErrBox> {
-    let mut lk = LockKey::new();
+    let lk = LockKey::new();
 
-    let mut capslock_app = Application::new()?;
-    let mut numlock_app = Application::new()?;
+    let base_dir = Builder::new().prefix("lock-key-indicator").tempdir()?;
 
-    let mut capslock_state = lk.state(LockKeys::CapitalLock)?;
+    prepare_asset_files(&base_dir)?;
+
+    let app = Application::new()?;
+
     let mut numlock_state = lk.state(LockKeys::NumberLock)?;
+    let mut capslock_state = lk.state(LockKeys::CapitalLock)?;
 
-    numlock_app.set_icon_from_file(state2file(numlock_state))?;
+    app.set_icon_from_file(state2filename(numlock_state, capslock_state))?;
 
     loop {
-        let cur_capslock_state = lk.state(LockKeys::CapitalLock)?;
         let cur_numlock_state = lk.state(LockKeys::NumberLock)?;
+        let cur_capslock_state = lk.state(LockKeys::CapitalLock)?;
 
-        if cur_capslock_state != capslock_state {
-            capslock_state = cur_capslock_state;
-            capslock_app.set_icon_from_file(state2file(capslock_state))?;
-        }
-
-        if cur_numlock_state != numlock_state {
+        if cur_capslock_state != capslock_state || cur_numlock_state != numlock_state {
             numlock_state = cur_numlock_state;
-
-            numlock_app.set_icon_from_file(state2file(numlock_state))?;
+            capslock_state = cur_capslock_state;
+            let mut pb = PathBuf::from(base_dir.path());
+            pb.push(state2filename(numlock_state, capslock_state));
+            app.set_icon_from_file(
+                pb.to_str()
+                    .ok_or_else(|| format_err!("Could not convert path to string"))?,
+            )?;
         }
     }
-
-    println!("State: {:?}", numlock_state);
-
-    Ok(())
 }
