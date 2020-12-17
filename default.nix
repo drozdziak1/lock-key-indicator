@@ -12,13 +12,15 @@ let
 
   common-deps = import ./nix/common-deps.nix { inherit sources rust; };
 
+  buildInputs = common-deps.buildInputs;
+  LIBCLANG_PATH = common-deps.LIBCLANG_PATH;
+
   # tell nix-build to ignore the `target` directory
   src = builtins.filterSource
     (path: type: type != "directory" || builtins.baseNameOf path != "target")
     ./.;
 in naersk.buildPackage {
-  inherit src;
+  inherit LIBCLANG_PATH buildInputs src;
   remapPathPrefix =
     true; # remove nix store references for a smaller output package
-  buildInputs = common-deps;
 }
