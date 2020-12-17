@@ -878,8 +878,7 @@ dependencies = [
 [[package]]
 name = "systray"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2d32363b257d5b4d444bb76a7d063663569544fd598cf4fd2f13bb5b0f2d8b5"
+source = "git+https://github.com/wngr/systray-rs#a2dc79dc2e03460065dcd8e4db8d6c4491fa2d9d"
 dependencies = [
  "glib",
  "gtk",

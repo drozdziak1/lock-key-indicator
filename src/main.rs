@@ -4,7 +4,12 @@ use systray::Application;
 use tempfile::{Builder, TempDir};
 
 use std::error::Error;
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{
+    fs::File,
+    io::Write,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 pub type ErrBox = Box<dyn Error>;
 
@@ -59,14 +64,36 @@ fn main() -> Result<(), ErrBox> {
 
     prepare_asset_files(&base_dir)?;
 
-    let app = Application::new()?;
+    let mut app = Application::new()?;
 
     let mut numlock_state = lk.state(LockKeys::NumberLock)?;
     let mut capslock_state = lk.state(LockKeys::CapitalLock)?;
 
-    app.set_icon_from_file(state2filename(numlock_state, capslock_state))?;
+    let mut pb = PathBuf::from(base_dir.path());
+    pb.push(state2filename(numlock_state, capslock_state));
+    app.set_icon_from_file(
+        pb.to_str()
+            .ok_or_else(|| format_err!("Could not convert path to string"))?,
+    )?;
 
-    loop {
+    // Message polling for systray is a bit wonky and we need to know when we're done
+    let done = Arc::new(Mutex::new(false));
+
+    let done_for_menu = done.clone();
+    app.add_menu_item("Quit", move |_a| -> Result<(), std::io::Error> {
+        println!("Bye!");
+        let mut done = done_for_menu.lock().unwrap();
+        *done = true;
+        Ok(())
+    })?;
+
+    while !*done.lock().unwrap() {
+        match app.try_wait(Default::default()) {
+            Err(systray::Error::TimeoutError) | Ok(_) => {}
+            other => {
+                other?;
+            }
+        }
         let cur_numlock_state = lk.state(LockKeys::NumberLock)?;
         let cur_capslock_state = lk.state(LockKeys::CapitalLock)?;
 
@@ -81,4 +108,5 @@ fn main() -> Result<(), ErrBox> {
             )?;
         }
     }
+    Ok(())
 }
